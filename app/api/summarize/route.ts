@@ -4,8 +4,6 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getGeminiApiKey } from "@/lib/gemini-config";
 
-const genAI = new GoogleGenerativeAI(getGeminiApiKey());
-
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const targetUrl = searchParams.get("url");
@@ -54,7 +52,8 @@ export async function GET(request: Request) {
       );
     }
 
-    // 3. Ask Gemini to structure the data
+    // 3. Ask Gemini to structure the data (lazy init so build never calls getGeminiApiKey())
+    const genAI = new GoogleGenerativeAI(getGeminiApiKey());
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const prompt = `
       You are an expert news analyst. Read this scraped markdown text of a news article and return a raw JSON object with these exact keys:
