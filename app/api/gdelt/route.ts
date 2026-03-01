@@ -1,18 +1,38 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { BigQuery } from "@google-cloud/bigquery";
 import * as admin from "firebase-admin";
-import { getFirestore } from "@/lib/firebase-admin";
 import { getBigQueryOptions } from "@/lib/google-credentials";
 
-const db = getFirestore();
+// Only initialize if the app hasn't been initialized AND the variables actually exist
+if (!admin.apps.length && process.env.FIREBASE_PROJECT_ID) {
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+      }),
+    });
+  } catch (error) {
+    console.error("Firebase initialization error", error);
+  }
+}
+
+const db = admin.apps.length ? admin.firestore() : null;
 
 export async function GET() {
+  if (!db) {
+    return NextResponse.json(
+      { success: false, error: "Database not available" },
+      { status: 503 }
+    );
+  }
   try {
-    // 2. Initialize BigQuery (from JSON file or base64 env)
     const bqOptions = getBigQueryOptions();
     const bigquery = new BigQuery(bqOptions);
 
-    // 3. Fetch the latest 15 minutes of news
     const query = `
       SELECT 
         GLOBALEVENTID,
@@ -33,12 +53,10 @@ export async function GET() {
     const [job] = await bigquery.createQueryJob({ query, location: "US" });
     const [rows] = await job.getQueryResults();
 
-    // 4. Save to Firebase Firestore using a Batch write (super fast!)
     const batch = db.batch();
     let savedCount = 0;
 
     rows.forEach((row: Record<string, unknown>) => {
-      // Use the GLOBALEVENTID as the document ID to prevent duplicates
       const docRef = db
         .collection("news_events")
         .doc(String(row.GLOBALEVENTID));
@@ -51,7 +69,7 @@ export async function GET() {
           location_name: row.location_name,
           sentiment_score: parseFloat(row.sentiment_score as string),
           news_link: row.news_link,
-          timestamp: admin.firestore.FieldValue.serverTimestamp(), // Records exactly when we saved it
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }
       );
@@ -59,7 +77,6 @@ export async function GET() {
       savedCount++;
     });
 
-    // Execute the batch save
     await batch.commit();
 
     return NextResponse.json({
