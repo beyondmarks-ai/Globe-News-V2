@@ -3,34 +3,25 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { BigQuery } from "@google-cloud/bigquery";
 import * as admin from "firebase-admin";
-import { getBigQueryOptions } from "@/lib/google-credentials";
-
-// Only initialize if the app hasn't been initialized AND the variables actually exist
-if (!admin.apps.length && process.env.FIREBASE_PROJECT_ID) {
-  try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-      }),
-    });
-  } catch (error) {
-    console.error("Firebase initialization error", error);
-  }
-}
-
-const db = admin.apps.length ? admin.firestore() : null;
+import { getFirestoreOrNull } from "@/lib/firebase-admin";
+import { getBigQueryOptionsOrNull } from "@/lib/google-credentials";
 
 export async function GET() {
+  const db = getFirestoreOrNull();
   if (!db) {
     return NextResponse.json(
-      { success: false, error: "Database not available" },
+      { success: false, error: "Database not available. Set FIREBASE_CREDENTIALS_BASE64 or other Firebase env." },
+      { status: 503 }
+    );
+  }
+  const bqOptions = getBigQueryOptionsOrNull();
+  if (!bqOptions) {
+    return NextResponse.json(
+      { success: false, error: "BigQuery not configured. Set BIGQUERY_CREDENTIALS_BASE64 or other Google env." },
       { status: 503 }
     );
   }
   try {
-    const bqOptions = getBigQueryOptions();
     const bigquery = new BigQuery(bqOptions);
 
     const query = `

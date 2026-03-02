@@ -1,29 +1,13 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import * as admin from "firebase-admin";
-
-// Only initialize if the app hasn't been initialized AND the variables actually exist
-if (!admin.apps.length && process.env.FIREBASE_PROJECT_ID) {
-  try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-      }),
-    });
-  } catch (error) {
-    console.error("Firebase initialization error", error);
-  }
-}
-
-const db = admin.apps.length ? admin.firestore() : null;
+import { getFirestoreOrNull } from "@/lib/firebase-admin";
 
 export async function GET() {
+  const db = getFirestoreOrNull();
   if (!db) {
     return NextResponse.json(
-      { error: "Database not available" },
+      { error: "Database not available. Set FIREBASE_CREDENTIALS_BASE64 or other Firebase env." },
       { status: 503 }
     );
   }
